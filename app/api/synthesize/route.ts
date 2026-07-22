@@ -41,7 +41,8 @@ export async function POST(request: Request) {
   if (!persona || !["kunkun", "fengge", "linqingxia", "tulei"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
   const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
   if (!voiceId) return Response.json({ error: "当前数字人尚未配置云端声线。" }, { status: 503 });
-  const text = cleanForSpeech(String(payload.text || ""));
+  const rawText = String(payload.text || "").trim().slice(0, 1200);
+  const text = cleanForSpeech(rawText);
   const grant = String(payload.grant || "");
   if (!text || !grant) return Response.json({ error: "语音请求无效。" }, { status: 400 });
 
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
   const id = await visitorKey(request, suppliedId);
   await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
   const claim = await runtime.DB.prepare("SELECT grant_id FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ? AND status = 0")
-    .bind(grant, id, await sha256(`${persona}:${text}`), Date.now())
+    .bind(grant, id, await sha256(`${persona}:${rawText}`), Date.now())
     .first<{ grant_id: string }>();
   if (!claim) return Response.json({ error: "这段回复的语音凭证已失效，请重新对话。" }, { status: 403 });
   const locked = await runtime.DB.prepare("UPDATE tts_grants SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
