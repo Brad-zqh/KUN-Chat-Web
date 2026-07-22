@@ -39,6 +39,7 @@ export default function Home() {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState("");
   const streamRef = useRef<HTMLDivElement>(null);
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
   const currentRole = useMemo(() => roles.find((role) => role.id === persona)!, [persona]);
   const messages = histories[persona] || [];
 
@@ -112,6 +113,11 @@ export default function Home() {
   async function speak(text: string, grant: string) {
     setError("");
     try {
+      const cachedUrl = audioCacheRef.current.get(grant);
+      if (cachedUrl) {
+        await new Audio(cachedUrl).play();
+        return;
+      }
       const response = await fetch("/api/synthesize", {
         method: "POST",
         headers: { "content-type": "application/json", "x-visitor-id": getVisitorId() },
@@ -122,9 +128,9 @@ export default function Home() {
         throw new Error(data.error || "云端语音暂时不可用。");
       }
       const url = URL.createObjectURL(await response.blob());
+      audioCacheRef.current.set(grant, url);
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      audio.onerror = () => { URL.revokeObjectURL(url); setError("音频播放失败，请重试。"); };
+      audio.onerror = () => setError("音频播放失败，请重试。");
       await audio.play();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "云端语音暂时不可用。");

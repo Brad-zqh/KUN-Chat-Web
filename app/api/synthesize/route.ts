@@ -24,6 +24,19 @@ function hexToBytes(hex: string) {
   return bytes;
 }
 
+function audioResponse(audio: ArrayBuffer | Uint8Array, cache = false) {
+  const body = audio instanceof Uint8Array ? audio : new Uint8Array(audio);
+  return new Response(body, {
+    headers: {
+      "content-type": "audio/mpeg",
+      "cache-control": cache ? "private, max-age=86400" : "private, no-store",
+      "content-length": String(body.byteLength),
+      "x-content-type-options": "nosniff",
+      "x-kun-audio-cache": cache ? "hit" : "miss",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const runtime = env as unknown as Record<string, string | undefined> & { DB?: D1Database };
   if (runtime.MINIMAX_TTS_PUBLIC_ENABLED !== "true" || !runtime.MINIMAX_API_KEY) {
@@ -43,13 +56,19 @@ export async function POST(request: Request) {
 
   const suppliedId = request.headers.get("x-visitor-id") || "anonymous";
   const id = await sha256(`tts:${suppliedId}`);
+  const replyHash = await sha256(`${persona}:${rawText}`);
   await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-  const claim = await runtime.DB.prepare("SELECT grant_id FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ? AND status = 0")
-    .bind(grant, id, await sha256(`${persona}:${rawText}`), Date.now())
-    .first<{ grant_id: string }>();
+  await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_audio_cache (reply_hash TEXT PRIMARY KEY, audio BLOB NOT NULL, created_at INTEGER NOT NULL)").run();
+  const claim = await runtime.DB.prepare("SELECT grant_id, status FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ?")
+    .bind(grant, id, replyHash, Date.now())
+    .first<{ grant_id: string; status: number }>();
   if (!claim) return Response.json({ error: "这段回复的语音凭证已失效，请重新对话。" }, { status: 403 });
+
+  const cached = await runtime.DB.prepare("SELECT audio FROM tts_audio_cache WHERE reply_hash = ?").bind(replyHash).first<{ audio: ArrayBuffer }>();
+  if (cached?.audio) return audioResponse(cached.audio, true);
+
   const locked = await runtime.DB.prepare("UPDATE tts_grants SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
-  if (!locked.meta.changes) return Response.json({ error: "语音正在生成或已经生成。" }, { status: 409 });
+  if (!locked.meta.changes) return Response.json({ error: "语音正在生成，请稍后再点一次。" }, { status: 409 });
 
   try {
     const upstream = await fetch(`${(runtime.MINIMAX_API_BASE || "https://api.minimax.io").replace(/\/$/, "")}/v1/t2a_v2`, {
@@ -68,14 +87,12 @@ export async function POST(request: Request) {
     const data = await upstream.json() as { data?: { audio?: string }; base_resp?: { status_code?: number; status_msg?: string } };
     if (!upstream.ok || data.base_resp?.status_code !== 0 || !data.data?.audio) throw new Error(data.base_resp?.status_msg || "upstream_failed");
     const audio = hexToBytes(data.data.audio);
-    return new Response(audio, {
-      headers: {
-        "content-type": "audio/mpeg",
-        "cache-control": "private, no-store",
-        "content-length": String(audio.byteLength),
-        "x-content-type-options": "nosniff",
-      },
-    });
+    const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
+    await runtime.DB.batch([
+      runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
+      runtime.DB.prepare("UPDATE tts_grants SET status = 2 WHERE grant_id = ?").bind(grant),
+    ]);
+    return audioResponse(audio);
   } catch {
     await runtime.DB.prepare("UPDATE tts_grants SET status = 0 WHERE grant_id = ?").bind(grant).run();
     return Response.json({ error: "MiniMax 语音服务暂时没有响应，请稍后重试。" }, { status: 502 });
