@@ -20,7 +20,8 @@ test("ships the public KUN Chat product instead of the starter", async () => {
   assert.match(page, /AI 数字人/);
   assert.match(chatRoute, /DEEPSEEK_API_KEY/);
   assert.match(chatRoute, /tts_grants/);
-  assert.match(chatRoute, /reviewed_public_context/);
+  assert.match(chatRoute, /reviewed_facts/);
+  assert.match(chatRoute, /reviewed_style_examples/);
   assert.match(chatRoute, /107 个审核来源、119 个事实块和 424 个短口语风格样本/);
   assert.match(hosting, /"d1": "DB"/);
   assert.doesNotMatch(page + layout, /codex-preview|Your site is taking shape|SkeletonPreview/);

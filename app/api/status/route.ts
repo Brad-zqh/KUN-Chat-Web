@@ -1,15 +1,19 @@
 import { env } from "cloudflare:workers";
+import { ragCounts } from "../../lib/rag";
 
 export async function GET() {
-  const runtime = env as unknown as Record<string, string | undefined>;
+  const runtime = env as unknown as Record<string, string | undefined> & { DB?: D1Database };
   const voicePersonas = ["KUNKUN", "FENGGE", "LINQINGXIA", "TULEI"].filter((persona) => Boolean(runtime[`MINIMAX_VOICE_ID_${persona}`])).map((persona) => persona.toLowerCase());
   const minimaxTts = runtime.MINIMAX_TTS_PUBLIC_ENABLED === "true" && Boolean(runtime.MINIMAX_API_KEY && voicePersonas.length);
+  const counts = runtime.DB ? await ragCounts(runtime.DB) : {};
   return Response.json({
     ready: Boolean(runtime.DEEPSEEK_API_KEY),
     freeMessages: Number(runtime.PUBLIC_FREE_MESSAGES || 5),
     voiceMode: minimaxTts ? "minimax_server" : "not_configured",
     minimaxTts,
     voicePersonas,
-    sourcePolicy: "approved_only",
+    sourcePolicy: "approved_production_only",
+    ragMode: "facts_and_style",
+    ragCounts: counts,
   });
 }
