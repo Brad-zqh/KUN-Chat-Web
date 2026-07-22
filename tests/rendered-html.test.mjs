@@ -14,9 +14,11 @@ test("ships the public KUN Chat product instead of the starter", async () => {
   assert.match(page, /峰哥/);
   assert.match(page, /林青霞/);
   assert.match(page, /涂磊/);
+  assert.match(page, /SpeechRecognition/);
   assert.match(layout, /公开表达型 AI 对话平台/);
   assert.match(chatRoute, /DEEPSEEK_API_KEY/);
-  assert.match(chatRoute, /approved_only|人物专属RAG仍在审核/);
+  assert.match(chatRoute, /reviewed_public_context/);
+  assert.match(chatRoute, /107 个审核来源、119 个事实块和 424 个短口语风格样本/);
   assert.match(hosting, /"d1": "DB"/);
   assert.doesNotMatch(page + layout, /codex-preview|Your site is taking shape|SkeletonPreview/);
 });
