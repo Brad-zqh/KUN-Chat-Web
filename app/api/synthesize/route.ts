@@ -31,13 +31,16 @@ function hexToBytes(hex: string) {
 
 export async function POST(request: Request) {
   const runtime = env as unknown as Record<string, string | undefined> & { DB?: D1Database };
-  if (runtime.MINIMAX_TTS_PUBLIC_ENABLED !== "true" || !runtime.MINIMAX_API_KEY || !runtime.MINIMAX_VOICE_ID_KUNKUN) {
+  if (runtime.MINIMAX_TTS_PUBLIC_ENABLED !== "true" || !runtime.MINIMAX_API_KEY) {
     return Response.json({ error: "MiniMax 云端语音尚未启用。" }, { status: 503 });
   }
   if (!runtime.DB) return Response.json({ error: "语音授权服务暂不可用。" }, { status: 503 });
 
   const payload = await request.json() as { persona?: PersonaId; text?: string; grant?: string };
-  if (payload.persona !== "kunkun") return Response.json({ error: "当前角色尚未配置云端语音。" }, { status: 400 });
+  const persona = payload.persona;
+  if (!persona || !["kunkun", "fengge", "linqingxia", "tulei"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
+  const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
+  if (!voiceId) return Response.json({ error: "当前数字人尚未配置云端声线。" }, { status: 503 });
   const text = cleanForSpeech(String(payload.text || ""));
   const grant = String(payload.grant || "");
   if (!text || !grant) return Response.json({ error: "语音请求无效。" }, { status: 400 });
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
   const id = await visitorKey(request, suppliedId);
   await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
   const claim = await runtime.DB.prepare("SELECT grant_id FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ? AND status = 0")
-    .bind(grant, id, await sha256(text), Date.now())
+    .bind(grant, id, await sha256(`${persona}:${text}`), Date.now())
     .first<{ grant_id: string }>();
   if (!claim) return Response.json({ error: "这段回复的语音凭证已失效，请重新对话。" }, { status: 403 });
   const locked = await runtime.DB.prepare("UPDATE tts_grants SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
         stream: false,
         output_format: "hex",
         language_boost: "Chinese",
-        voice_setting: { voice_id: runtime.MINIMAX_VOICE_ID_KUNKUN, speed: 1.03, vol: 1, pitch: 0 },
+        voice_setting: { voice_id: voiceId, speed: 1.03, vol: 1, pitch: 0 },
         audio_setting: { sample_rate: 24000, bitrate: 128000, format: "mp3", channel: 1 },
       }),
     });

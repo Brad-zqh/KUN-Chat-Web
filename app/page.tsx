@@ -6,11 +6,11 @@ type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei";
 type Source = { title: string; url: string };
 type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; audioGrant?: string | null };
 
-const roles: Array<{ id: PersonaId; name: string; real: string; note: string; mark: string }> = [
-  { id: "kunkun", name: "坤坤", real: "蔡徐坤", note: "音乐、舞台与创作", mark: "坤" },
-  { id: "fengge", name: "峰哥", real: "峰哥", note: "直接、具体的观点", mark: "峰" },
-  { id: "linqingxia", name: "林青霞", real: "林青霞", note: "电影、阅读与审美", mark: "林" },
-  { id: "tulei", name: "涂磊", real: "涂磊", note: "关系、责任与边界", mark: "涂" },
+const roles: Array<{ id: PersonaId; name: string; real: string; note: string; mark: string; avatar: string }> = [
+  { id: "kunkun", name: "坤坤", real: "蔡徐坤", note: "音乐、舞台与创作", mark: "坤", avatar: "/kun-avatar.png" },
+  { id: "fengge", name: "峰哥", real: "峰哥", note: "直接、具体的观点", mark: "峰", avatar: "/fengge-avatar.jpg" },
+  { id: "linqingxia", name: "林青霞", real: "林青霞", note: "电影、阅读与审美", mark: "林", avatar: "/linqingxia-avatar.jpg" },
+  { id: "tulei", name: "涂磊", real: "涂磊", note: "关系、责任与边界", mark: "涂", avatar: "/tulei-avatar.jpg" },
 ];
 
 const welcomes: Record<PersonaId, string> = {
@@ -132,7 +132,7 @@ export default function Home() {
   }
 
   const rendered = messages.length ? messages : [{ role: "assistant", content: welcomes[persona] } as Message];
-  const avatar = persona === "kunkun" ? <img src="/kun-avatar.png" alt="坤坤 AI 动漫头像" /> : currentRole.mark;
+  const avatar = <img src={currentRole.avatar} alt={`${currentRole.name}数字人动漫头像`} />;
 
   return (
     <main className="shell">
@@ -145,7 +145,7 @@ export default function Home() {
         <p>角色</p>
         {roles.map((role) => (
           <button key={role.id} className={persona === role.id ? "active" : ""} onClick={() => { setPersona(role.id); setError(""); }}>
-            <span>{role.mark}</span><b>{role.name}</b><small>{role.note}</small>
+            <span><img src={role.avatar} alt="" /></span><b>{role.name}</b><small>{role.note}</small>
           </button>
         ))}
         <div className="railNote"><b>数字人实验室</b><br />人格 RAG、公开表达风格与交互声线组合成赛博同人角色。所有角色均非真人本人、团队或工作室。</div>

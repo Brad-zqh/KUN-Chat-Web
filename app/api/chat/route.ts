@@ -96,13 +96,14 @@ export async function POST(request: Request) {
   used += 1;
   if (runtime.DB) await runtime.DB.prepare("INSERT INTO visitors (id, message_count, updated_at) VALUES (?, 1, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP").bind(id).run();
   let audioGrant: string | null = null;
-  const minimaxReady = runtime.MINIMAX_TTS_PUBLIC_ENABLED === "true" && Boolean(runtime.MINIMAX_API_KEY && runtime.MINIMAX_VOICE_ID_KUNKUN);
-  if (runtime.DB && persona === "kunkun" && minimaxReady) {
+  const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
+  const minimaxReady = runtime.MINIMAX_TTS_PUBLIC_ENABLED === "true" && Boolean(runtime.MINIMAX_API_KEY && voiceId);
+  if (runtime.DB && minimaxReady) {
     audioGrant = crypto.randomUUID();
     await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
     await runtime.DB.prepare("DELETE FROM tts_grants WHERE expires_at < ?").bind(Date.now()).run();
     await runtime.DB.prepare("INSERT INTO tts_grants (grant_id, visitor_id, reply_hash, expires_at) VALUES (?, ?, ?, ?)")
-      .bind(audioGrant, id, await textHash(reply), Date.now() + 15 * 60 * 1000)
+      .bind(audioGrant, id, await textHash(`${persona}:${reply}`), Date.now() + 15 * 60 * 1000)
       .run();
   }
   return Response.json({
