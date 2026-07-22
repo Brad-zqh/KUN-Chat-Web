@@ -63,6 +63,7 @@ export async function POST(request: Request) {
   const freeLimit = Math.max(1, Number(runtime.PUBLIC_FREE_MESSAGES || 5));
   const suppliedId = request.headers.get("x-visitor-id") || "anonymous";
   const id = await visitorKey(request, suppliedId);
+  const ttsVisitorId = await textHash(`tts:${suppliedId}`);
   let used = 0;
   if (runtime.DB) {
     await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS visitors (id TEXT PRIMARY KEY, message_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
     await runtime.DB.prepare("DELETE FROM tts_grants WHERE expires_at < ?").bind(Date.now()).run();
     await runtime.DB.prepare("INSERT INTO tts_grants (grant_id, visitor_id, reply_hash, expires_at) VALUES (?, ?, ?, ?)")
-      .bind(audioGrant, id, await textHash(`${persona}:${reply}`), Date.now() + 15 * 60 * 1000)
+      .bind(audioGrant, ttsVisitorId, await textHash(`${persona}:${reply}`), Date.now() + 15 * 60 * 1000)
       .run();
   }
   return Response.json({

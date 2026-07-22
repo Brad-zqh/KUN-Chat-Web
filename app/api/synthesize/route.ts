@@ -17,11 +17,6 @@ async function sha256(text: string) {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function visitorKey(request: Request, supplied: string) {
-  const ip = request.headers.get("cf-connecting-ip") || "local";
-  return sha256(`${ip}:${supplied}`);
-}
-
 function hexToBytes(hex: string) {
   if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0) throw new Error("invalid_audio");
   const bytes = new Uint8Array(hex.length / 2);
@@ -47,7 +42,7 @@ export async function POST(request: Request) {
   if (!text || !grant) return Response.json({ error: "语音请求无效。" }, { status: 400 });
 
   const suppliedId = request.headers.get("x-visitor-id") || "anonymous";
-  const id = await visitorKey(request, suppliedId);
+  const id = await sha256(`tts:${suppliedId}`);
   await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
   const claim = await runtime.DB.prepare("SELECT grant_id FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ? AND status = 0")
     .bind(grant, id, await sha256(`${persona}:${rawText}`), Date.now())
