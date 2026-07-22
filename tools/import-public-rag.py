@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(r"D:\OneDrive\LLMs")
 ENDPOINT = os.environ.get("KUN_RAG_IMPORT_URL", "https://kun-chat-public.zhaoqiuhaobrad.chatgpt.site/api/admin/rag-import")
 SECRET = os.environ.get("RAG_IMPORT_SECRET", "")
+SITES_BYPASS_TOKEN = os.environ.get("SITES_BYPASS_TOKEN", "")
 
 
 def rows(db_path: Path, sql: str) -> list[dict]:
@@ -43,7 +44,10 @@ def upload(persona: str, kind: str, records: list[dict]) -> None:
     for start in range(0, max(1, len(records)), 80):
         batch = records[start:start + 80]
         payload = json.dumps({"persona": persona, "kind": kind, "reset": start == 0, "records": batch}, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(ENDPOINT, data=payload, method="POST", headers={"authorization": f"Bearer {SECRET}", "content-type": "application/json"})
+        headers = {"authorization": f"Bearer {SECRET}", "content-type": "application/json", "user-agent": "KUN-Chat-RAG-Sync/1.0"}
+        if SITES_BYPASS_TOKEN:
+            headers["OAI-Sites-Authorization"] = f"Bearer {SITES_BYPASS_TOKEN}"
+        request = urllib.request.Request(ENDPOINT, data=payload, method="POST", headers=headers)
         with urllib.request.urlopen(request, timeout=60) as response:
             result = json.loads(response.read().decode("utf-8"))
         print(f"{persona}/{kind}: batch={len(batch)} total={result['total']}")
