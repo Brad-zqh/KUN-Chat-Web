@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei";
 type Source = { title: string; url: string };
-type Message = { role: "user" | "assistant"; content: string; sources?: Source[] };
+type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; audioGrant?: string | null };
 
 const roles: Array<{ id: PersonaId; name: string; real: string; note: string; mark: string }> = [
   { id: "kunkun", name: "坤坤", real: "蔡徐坤", note: "音乐、舞台与创作", mark: "坤" },
@@ -34,6 +34,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [minimaxTts, setMinimaxTts] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState("");
@@ -48,6 +49,7 @@ export default function Home() {
     }
     fetch("/api/status").then((response) => response.json()).then((data) => {
       setReady(Boolean(data.ready));
+      setMinimaxTts(Boolean(data.minimaxTts));
       if (typeof data.freeMessages === "number") setRemaining(data.freeMessages);
     }).catch(() => setReady(false));
   }, []);
@@ -76,7 +78,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "暂时无法回复，请稍后再试。");
-      append(persona, { role: "assistant", content: data.reply, sources: data.sources || [] });
+      append(persona, { role: "assistant", content: data.reply, sources: data.sources || [], audioGrant: data.audioGrant || null });
       if (typeof data.remaining === "number") setRemaining(data.remaining);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "网络连接失败，请稍后再试。");
@@ -107,13 +109,26 @@ export default function Home() {
     recognition.start();
   }
 
-  function speak(text: string) {
-    if (!("speechSynthesis" in window)) return setError("当前浏览器不支持语音朗读。");
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "zh-CN";
-    utterance.rate = 1.03;
-    window.speechSynthesis.speak(utterance);
+  async function speak(text: string, grant: string) {
+    setError("");
+    try {
+      const response = await fetch("/api/synthesize", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-visitor-id": getVisitorId() },
+        body: JSON.stringify({ persona, text, grant }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "云端语音暂时不可用。");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      audio.onerror = () => { URL.revokeObjectURL(url); setError("音频播放失败，请重试。"); };
+      await audio.play();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "云端语音暂时不可用。");
+    }
   }
 
   const rendered = messages.length ? messages : [{ role: "assistant", content: welcomes[persona] } as Message];
@@ -122,8 +137,8 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div className="brand"><div className="brandMark">K</div><div><strong>KUN Chat</strong><span>公开表达型 AI 对话平台</span></div></div>
-        <div className="service"><i className={ready ? "online" : ""} />{ready ? "文字服务在线" : "服务检查中"}</div>
+        <div className="brand"><div className="brandMark">K</div><div><strong>KUN Chat</strong><span>AI 数字人 · 赛博同人对话平台</span></div></div>
+        <div className="service"><i className={ready ? "online" : ""} />{ready ? (minimaxTts ? "文字与数字人语音在线" : "文字服务在线") : "服务检查中"}</div>
       </header>
 
       <nav className="rail" aria-label="选择角色">
@@ -133,16 +148,16 @@ export default function Home() {
             <span>{role.mark}</span><b>{role.name}</b><small>{role.note}</small>
           </button>
         ))}
-        <div className="railNote">所有角色均为基于已审核公开资料设计的 AI，不代表真人本人、团队或工作室。</div>
+        <div className="railNote"><b>数字人实验室</b><br />人格 RAG、公开表达风格与交互声线组合成赛博同人角色。所有角色均非真人本人、团队或工作室。</div>
       </nav>
 
       <section className="chat">
         <div className="chatHead">
           <div className="portrait">{avatar}</div>
-          <div><h1>{currentRole.name}</h1><p>{currentRole.note} · 双 RAG 生产资料</p></div>
+          <div><h1>{currentRole.name}<em>数字人</em></h1><p>{currentRole.note} · 人格 RAG · 赛博同人</p></div>
           <div className="quota">{remaining === null ? "免费体验" : `剩余 ${remaining} 次`}</div>
         </div>
-        <div className="disclosure">AI 同人角色 · 非{currentRole.real}本人或相关团队</div>
+        <div className="disclosure">AI 数字人 / 赛博同人 · 模拟公开表达风格 · 非{currentRole.real}本人或相关团队</div>
 
         <div className="stream" ref={streamRef}>
           {rendered.map((message, index) => (
@@ -151,7 +166,7 @@ export default function Home() {
               <div className="bubble">
                 {message.content}
                 {message.sources?.length ? <div className="sources"><strong>参考公开资料</strong>{message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div> : null}
-                {message.role === "assistant" && <button className="listen" onClick={() => speak(message.content)}>🔊 浏览器朗读</button>}
+                {message.role === "assistant" && message.audioGrant && <button className="listen" onClick={() => void speak(message.content, message.audioGrant!)}>🔊 MiniMax 云端数字人语音</button>}
               </div>
             </article>
           ))}
@@ -164,7 +179,7 @@ export default function Home() {
           <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="有问题，尽管问" rows={1} />
           <button className="send" disabled={!input.trim() || busy || remaining === 0} onClick={() => void send()} aria-label="发送">↑</button>
         </div>
-        <footer>语音输入与朗读由浏览器提供，不是任何真人的克隆声音。公开版默认每位访客免费 5 次。</footer>
+        <footer>{minimaxTts ? "语音由服务器安全调用 MiniMax；密钥与 Voice ID 不会发送到浏览器。" : "云端数字人语音尚未启用；不会回退成不一致的浏览器声线。"} 公开版默认每位访客免费 5 次。</footer>
       </section>
     </main>
   );

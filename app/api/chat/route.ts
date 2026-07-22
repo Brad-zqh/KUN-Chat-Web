@@ -45,6 +45,11 @@ async function visitorKey(request: Request, supplied: string) {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function textHash(text: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export async function POST(request: Request) {
   const runtime = env as unknown as Record<string, string | undefined> & { DB?: D1Database };
   const apiKey = runtime.DEEPSEEK_API_KEY;
@@ -90,11 +95,22 @@ export async function POST(request: Request) {
 
   used += 1;
   if (runtime.DB) await runtime.DB.prepare("INSERT INTO visitors (id, message_count, updated_at) VALUES (?, 1, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP").bind(id).run();
+  let audioGrant: string | null = null;
+  const minimaxReady = runtime.MINIMAX_TTS_PUBLIC_ENABLED === "true" && Boolean(runtime.MINIMAX_API_KEY && runtime.MINIMAX_VOICE_ID_KUNKUN);
+  if (runtime.DB && persona === "kunkun" && minimaxReady) {
+    audioGrant = crypto.randomUUID();
+    await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+    await runtime.DB.prepare("DELETE FROM tts_grants WHERE expires_at < ?").bind(Date.now()).run();
+    await runtime.DB.prepare("INSERT INTO tts_grants (grant_id, visitor_id, reply_hash, expires_at) VALUES (?, ?, ?, ?)")
+      .bind(audioGrant, id, await textHash(reply), Date.now() + 15 * 60 * 1000)
+      .run();
+  }
   return Response.json({
     reply,
     remaining: Math.max(0, freeLimit - used),
     persona,
     disclosure: "AI 角色，非真人本人",
+    audioGrant,
     sources: sources.map(({ title, url }) => ({ title, url })),
   });
 }

@@ -20,7 +20,7 @@ button { cursor:pointer; }
 .railNote { margin:22px 8px; padding:14px; border-radius:14px; background:#e8f1ff; color:#5270a8; font-size:11px; line-height:1.65; }
 .chat { min-width:0; height:calc(100vh - 76px); display:grid; grid-template-rows:auto auto minmax(0,1fr) auto auto; }
 .chatHead { display:flex; align-items:center; gap:13px; padding:20px clamp(20px,5vw,72px) 10px; }.portrait,.miniPortrait { display:grid;place-items:center;color:white;background:linear-gradient(145deg,#397ff0,#123d9c);font-weight:850;box-shadow:0 8px 24px #1558d638; }
-.portrait { width:54px;height:54px;border-radius:19px;font-size:22px; }.chatHead h1 { margin:0;font-size:24px; }.chatHead p { margin:4px 0 0;color:var(--muted);font-size:13px; }.quota { margin-left:auto;padding:8px 13px;border-radius:999px;color:#1558d6;background:#e6f0ff;border:1px solid #c6dafd;font-size:12px;font-weight:700; }
+.portrait { width:54px;height:54px;border-radius:19px;font-size:22px; }.chatHead h1 { margin:0;font-size:24px;display:flex;align-items:center;gap:8px }.chatHead h1 em{font-style:normal;font-size:10px;letter-spacing:.08em;color:#2f6ed4;background:#e5efff;border:1px solid #c7dbff;border-radius:999px;padding:4px 7px}.chatHead p { margin:4px 0 0;color:var(--muted);font-size:13px; }.quota { margin-left:auto;padding:8px 13px;border-radius:999px;color:#1558d6;background:#e6f0ff;border:1px solid #c6dafd;font-size:12px;font-weight:700; }
 .portrait img,.miniPortrait img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .disclosure { justify-self:center; margin:5px 20px 8px;padding:7px 15px;border-radius:999px;background:#fff6d8;color:#806829;font-size:11px; }
 .stream { overflow:auto;padding:18px clamp(20px,5vw,72px) 30px;scrollbar-width:thin; }
