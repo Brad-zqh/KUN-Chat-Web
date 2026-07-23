@@ -37,6 +37,85 @@ function audioResponse(audio: ArrayBuffer | Uint8Array, cache = false) {
   });
 }
 
+async function minimaxWebSocketAudio(
+  apiBase: string,
+  apiKey: string,
+  voiceId: string,
+  text: string,
+  model: string,
+) {
+  const base = apiBase.replace(/\/$/, "").replace(/^https:/, "https:").replace(/^http:/, "http:");
+  const response = await fetch(`${base}/ws/v1/t2a_v2`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${apiKey}` },
+  });
+  const socket = (response as Response & { webSocket?: WebSocket & { accept(): void } }).webSocket;
+  if (!socket) throw new Error(`websocket_upgrade_failed_${response.status}`);
+  socket.accept();
+
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let started = false;
+    let finishSent = false;
+    let settled = false;
+    const timeout = setTimeout(() => finish(new Error("websocket_timeout")), 60000);
+
+    function finish(error?: Error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try { socket.close(); } catch { /* already closed */ }
+      if (error) return reject(error);
+      const length = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+      if (!length) return reject(new Error("empty_audio"));
+      const audio = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        audio.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      resolve(audio);
+    }
+
+    socket.addEventListener("message", (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(String(event.data)) as {
+          event?: string;
+          is_final?: boolean;
+          data?: { audio?: string; is_final?: boolean };
+          base_resp?: { status_code?: number; status_msg?: string };
+        };
+        if (message.base_resp?.status_code) {
+          return finish(new Error(message.base_resp.status_msg || `minimax_${message.base_resp.status_code}`));
+        }
+        if (message.event === "connected_success") {
+          socket.send(JSON.stringify({
+            event: "task_start",
+            model,
+            language_boost: "Chinese",
+            voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+            audio_setting: { sample_rate: 24000, bitrate: 128000, format: "mp3", channel: 1 },
+          }));
+        } else if (message.event === "task_started" && !started) {
+          started = true;
+          socket.send(JSON.stringify({ event: "task_continue", text }));
+        }
+        if (message.data?.audio) chunks.push(hexToBytes(message.data.audio));
+        if ((message.is_final || message.data?.is_final) && !finishSent) {
+          finishSent = true;
+          socket.send(JSON.stringify({ event: "task_finish" }));
+        }
+        if (message.event === "task_finished") finish();
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error("websocket_message_failed"));
+      }
+    });
+    socket.addEventListener("error", () => finish(new Error("websocket_error")));
+    socket.addEventListener("close", () => {
+      if (!settled) finish(new Error("websocket_closed"));
+    });
+  });
+}
+
 export async function POST(request: Request) {
   const runtime = env as unknown as Record<string, string | undefined> & { DB?: D1Database };
   if (runtime.MINIMAX_TTS_PUBLIC_ENABLED !== "true" || !runtime.MINIMAX_API_KEY) {
@@ -71,6 +150,21 @@ export async function POST(request: Request) {
   if (!locked.meta.changes) return Response.json({ error: "语音正在生成，请稍后再点一次。" }, { status: 409 });
 
   try {
+    if ((runtime.MINIMAX_TTS_TRANSPORT || "http").toLowerCase() === "websocket") {
+      const audio = await minimaxWebSocketAudio(
+        runtime.MINIMAX_API_BASE || "https://api.minimax.io",
+        runtime.MINIMAX_API_KEY,
+        voiceId,
+        text,
+        runtime.MINIMAX_TTS_MODEL || "speech-2.8-hd",
+      );
+      const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
+      await runtime.DB.batch([
+        runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
+        runtime.DB.prepare("UPDATE tts_grants SET status = 2 WHERE grant_id = ?").bind(grant),
+      ]);
+      return audioResponse(audio);
+    }
     const upstream = await fetch(`${(runtime.MINIMAX_API_BASE || "https://api.minimax.io").replace(/\/$/, "")}/v1/t2a_v2`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${runtime.MINIMAX_API_KEY}` },
