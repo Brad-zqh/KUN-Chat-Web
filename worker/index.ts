@@ -28,6 +28,21 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const origin = request.headers.get("origin");
+    const allowedOrigin = origin === "https://brad-zqh.github.io" ? origin : null;
+
+    if (url.pathname.startsWith("/api/") && request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...(allowedOrigin ? { "access-control-allow-origin": allowedOrigin } : {}),
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "content-type, x-visitor-id",
+          "access-control-max-age": "86400",
+          vary: "Origin",
+        },
+      });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -40,7 +55,17 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    const response = await handler.fetch(request, env, ctx);
+    if (!url.pathname.startsWith("/api/") || !allowedOrigin) return response;
+
+    const headers = new Headers(response.headers);
+    headers.set("access-control-allow-origin", allowedOrigin);
+    headers.append("vary", "Origin");
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   },
 };
 
