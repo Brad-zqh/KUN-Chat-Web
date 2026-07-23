@@ -128,25 +128,25 @@ export async function POST(request: Request) {
   if (!persona || !["kunkun", "fengge", "linqingxia", "tulei"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
   const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
   if (!voiceId) return Response.json({ error: "当前数字人尚未配置云端声线。" }, { status: 503 });
-  const rawText = String(payload.text || "").trim().slice(0, 1200);
-  const text = cleanForSpeech(rawText);
   const grant = String(payload.grant || "");
-  if (!text || !grant) return Response.json({ error: "语音请求无效。" }, { status: 400 });
+  if (!grant) return Response.json({ error: "语音请求无效。" }, { status: 400 });
 
   const suppliedId = request.headers.get("x-visitor-id") || "anonymous";
   const id = await sha256(`tts:${suppliedId}`);
-  const replyHash = await sha256(`${persona}:${rawText}`);
-  await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants_v2 (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, persona TEXT NOT NULL, reply_text TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
   await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_audio_cache (reply_hash TEXT PRIMARY KEY, audio BLOB NOT NULL, created_at INTEGER NOT NULL)").run();
-  const claim = await runtime.DB.prepare("SELECT grant_id, status FROM tts_grants WHERE grant_id = ? AND visitor_id = ? AND reply_hash = ? AND expires_at >= ?")
-    .bind(grant, id, replyHash, Date.now())
-    .first<{ grant_id: string; status: number }>();
+  const claim = await runtime.DB.prepare("SELECT grant_id, status, reply_text, reply_hash FROM tts_grants_v2 WHERE grant_id = ? AND visitor_id = ? AND persona = ? AND expires_at >= ?")
+    .bind(grant, id, persona, Date.now())
+    .first<{ grant_id: string; status: number; reply_text: string; reply_hash: string }>();
   if (!claim) return Response.json({ error: "这段回复的语音凭证已失效，请重新对话。" }, { status: 403 });
+  const replyHash = claim.reply_hash;
+  const text = cleanForSpeech(claim.reply_text);
+  if (!text) return Response.json({ error: "语音请求无效。" }, { status: 400 });
 
   const cached = await runtime.DB.prepare("SELECT audio FROM tts_audio_cache WHERE reply_hash = ?").bind(replyHash).first<{ audio: ArrayBuffer }>();
   if (cached?.audio) return audioResponse(cached.audio, true);
 
-  const locked = await runtime.DB.prepare("UPDATE tts_grants SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
+  const locked = await runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
   if (!locked.meta.changes) return Response.json({ error: "语音正在生成，请稍后再点一次。" }, { status: 409 });
 
   try {
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
       const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
       await runtime.DB.batch([
         runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
-        runtime.DB.prepare("UPDATE tts_grants SET status = 2 WHERE grant_id = ?").bind(grant),
+        runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 2 WHERE grant_id = ?").bind(grant),
       ]);
       return audioResponse(audio);
     }
@@ -184,11 +184,11 @@ export async function POST(request: Request) {
     const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
     await runtime.DB.batch([
       runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
-      runtime.DB.prepare("UPDATE tts_grants SET status = 2 WHERE grant_id = ?").bind(grant),
+      runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 2 WHERE grant_id = ?").bind(grant),
     ]);
     return audioResponse(audio);
   } catch {
-    await runtime.DB.prepare("UPDATE tts_grants SET status = 0 WHERE grant_id = ?").bind(grant).run();
+    await runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 0 WHERE grant_id = ?").bind(grant).run();
     return Response.json({ error: "MiniMax 语音服务暂时没有响应，请稍后重试。" }, { status: 502 });
   }
 }

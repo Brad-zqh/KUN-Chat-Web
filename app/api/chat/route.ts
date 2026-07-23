@@ -126,10 +126,10 @@ ${styleContext(styles)}
   const minimaxReady = runtime.MINIMAX_TTS_PUBLIC_ENABLED === "true" && Boolean(runtime.MINIMAX_API_KEY && voiceId);
   if (runtime.DB && minimaxReady) {
     audioGrant = crypto.randomUUID();
-    await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-    await runtime.DB.prepare("DELETE FROM tts_grants WHERE expires_at < ?").bind(Date.now()).run();
-    await runtime.DB.prepare("INSERT INTO tts_grants (grant_id, visitor_id, reply_hash, expires_at) VALUES (?, ?, ?, ?)")
-      .bind(audioGrant, ttsVisitorId, await textHash(`${persona}:${reply}`), Date.now() + 7 * 24 * 60 * 60 * 1000)
+    await runtime.DB.prepare("CREATE TABLE IF NOT EXISTS tts_grants_v2 (grant_id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, persona TEXT NOT NULL, reply_text TEXT NOT NULL, reply_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+    await runtime.DB.prepare("DELETE FROM tts_grants_v2 WHERE expires_at < ?").bind(Date.now()).run();
+    await runtime.DB.prepare("INSERT INTO tts_grants_v2 (grant_id, visitor_id, persona, reply_text, reply_hash, expires_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(audioGrant, ttsVisitorId, persona, reply, await textHash(`${persona}:${reply}`), Date.now() + 7 * 24 * 60 * 60 * 1000)
       .run();
   }
   return Response.json({
