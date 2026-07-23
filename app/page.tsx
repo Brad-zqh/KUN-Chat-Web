@@ -30,6 +30,22 @@ function getVisitorId() {
   return value;
 }
 
+async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, attempts = 3) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      if (![409, 502, 503, 504].includes(response.status) || attempt === attempts - 1) return response;
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts - 1) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+  throw lastError instanceof Error ? lastError : new Error("network request failed");
+}
+
 export default function Home() {
   const [persona, setPersona] = useState<PersonaId>("kunkun");
   const [histories, setHistories] = useState<Record<string, Message[]>>({});
@@ -43,6 +59,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const streamRef = useRef<HTMLDivElement>(null);
   const audioCacheRef = useRef<Map<string, string>>(new Map());
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activeGrantRef = useRef<string | null>(null);
   const currentRole = useMemo(() => roles.find((role) => role.id === persona)!, [persona]);
   const messages = histories[persona] || [];
 
@@ -75,7 +93,7 @@ export default function Home() {
     append(persona, { role: "user", content: text });
     setBusy(true);
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetchWithRetry("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json", "x-visitor-id": getVisitorId() },
         body: JSON.stringify({ persona, message: text, history: messages.slice(-10) }),
@@ -85,7 +103,8 @@ export default function Home() {
       append(persona, { role: "assistant", content: data.reply, sources: data.sources || [], audioGrant: data.audioGrant || null });
       if (typeof data.remaining === "number") setRemaining(data.remaining);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "网络连接失败，请稍后再试。");
+      const message = cause instanceof Error ? cause.message : "";
+      setError(message === "Failed to fetch" ? "网络连接短暂中断，自动重试后仍未成功，请再点一次。" : (message || "网络连接失败，请稍后再试。"));
     } finally {
       setBusy(false);
     }
@@ -113,16 +132,39 @@ export default function Home() {
     recognition.start();
   }
 
+  function stopActiveAudio() {
+    const audio = activeAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.onended = null;
+      audio.onerror = null;
+    }
+    activeAudioRef.current = null;
+    activeGrantRef.current = null;
+    setSpeakingGrant(null);
+  }
+
   async function speak(text: string, grant: string) {
+    if (activeGrantRef.current === grant && activeAudioRef.current && !activeAudioRef.current.paused) {
+      stopActiveAudio();
+      return;
+    }
+    stopActiveAudio();
     setError("");
     setSpeakingGrant(grant);
+    activeGrantRef.current = grant;
     try {
       const cachedUrl = audioCacheRef.current.get(grant);
       if (cachedUrl) {
-        await new Audio(cachedUrl).play();
+        const audio = new Audio(cachedUrl);
+        activeAudioRef.current = audio;
+        audio.onended = stopActiveAudio;
+        audio.onerror = () => { stopActiveAudio(); setError("音频播放失败，请重试。"); };
+        await audio.play();
         return;
       }
-      const response = await fetch("/api/synthesize", {
+      const response = await fetchWithRetry("/api/synthesize", {
         method: "POST",
         headers: { "content-type": "application/json", "x-visitor-id": getVisitorId() },
         body: JSON.stringify({ persona, text, grant }),
@@ -134,14 +176,23 @@ export default function Home() {
       const url = URL.createObjectURL(await response.blob());
       audioCacheRef.current.set(grant, url);
       const audio = new Audio(url);
-      audio.onerror = () => setError("音频播放失败，请重试。");
+      activeAudioRef.current = audio;
+      audio.onended = stopActiveAudio;
+      audio.onerror = () => { stopActiveAudio(); setError("音频播放失败，请重试。"); };
       await audio.play();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "云端语音暂时不可用。");
-    } finally {
-      setSpeakingGrant(null);
+      stopActiveAudio();
+      const message = cause instanceof Error ? cause.message : "";
+      setError(message === "Failed to fetch" ? "语音连接短暂中断，自动重试后仍未成功，请再点一次。" : (message || "云端语音暂时不可用。"));
     }
   }
+
+  useEffect(() => () => {
+    const audio = activeAudioRef.current;
+    if (audio) audio.pause();
+    audioCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+    audioCacheRef.current.clear();
+  }, []);
 
   const rendered = messages.length ? messages : [{ role: "assistant", content: welcomes[persona] } as Message];
   const avatar = <img src={currentRole.avatar} alt={`${currentRole.name}数字人动漫头像`} />;
@@ -156,7 +207,7 @@ export default function Home() {
       <nav className="rail" aria-label="选择角色">
         <p>角色</p>
         {roles.map((role) => (
-          <button key={role.id} className={persona === role.id ? "active" : ""} onClick={() => { setPersona(role.id); setError(""); }}>
+          <button key={role.id} className={persona === role.id ? "active" : ""} onClick={() => { stopActiveAudio(); setPersona(role.id); setError(""); }}>
             <span><img src={role.avatar} alt="" /></span><b>{role.name}</b><small>{role.note}</small>
           </button>
         ))}
@@ -178,7 +229,7 @@ export default function Home() {
               <div className="bubble">
                 {message.content}
                 {message.sources?.length ? <div className="sources"><strong>参考公开资料</strong>{message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div> : null}
-                {message.role === "assistant" && message.audioGrant && <button className="listen" disabled={speakingGrant === message.audioGrant} onClick={() => void speak(message.content, message.audioGrant!)}>{speakingGrant === message.audioGrant ? "正在生成语音…" : "🔊 点击播放 MiniMax 云端数字人语音"}</button>}
+                {message.role === "assistant" && message.audioGrant && <button className="listen" onClick={() => void speak(message.content, message.audioGrant!)}>{speakingGrant === message.audioGrant ? "停止播放" : "🔊 点击播放 MiniMax 云端数字人语音"}</button>}
               </div>
             </article>
           ))}
