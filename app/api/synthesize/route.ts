@@ -261,8 +261,12 @@ export async function POST(request: Request) {
   const text = cleanForSpeech(claim.reply_text);
   if (!text) return Response.json({ error: "语音请求无效。" }, { status: 400 });
   const speed = minimaxSpeedFor(runtime, persona);
+  const model = runtime.MINIMAX_TTS_MODEL || "speech-2.8-hd";
+  // Include every timbre-affecting setting so a previous Voice ID/model never
+  // leaks through after a server-side voice update.
+  const audioCacheKey = await sha256(`${replyHash}|${persona}|${voiceId}|${model}|${speed}|24000|mp3`);
 
-  const cached = await runtime.DB.prepare("SELECT audio FROM tts_audio_cache WHERE reply_hash = ?").bind(replyHash).first<{ audio: ArrayBuffer }>();
+  const cached = await runtime.DB.prepare("SELECT audio FROM tts_audio_cache WHERE reply_hash = ?").bind(audioCacheKey).first<{ audio: ArrayBuffer }>();
   if (cached?.audio) return audioResponse(cached.audio, true);
 
   const locked = await runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 1 WHERE grant_id = ? AND status = 0").bind(grant).run();
@@ -275,12 +279,12 @@ export async function POST(request: Request) {
         runtime.MINIMAX_API_KEY,
         voiceId,
         text,
-        runtime.MINIMAX_TTS_MODEL || "speech-2.8-hd",
+        model,
         speed,
         async (audio) => {
           const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
           await runtime.DB!.batch([
-            runtime.DB!.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
+            runtime.DB!.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(audioCacheKey, exactAudio, Date.now()),
             runtime.DB!.prepare("UPDATE tts_grants_v2 SET status = 2 WHERE grant_id = ?").bind(grant),
           ]);
         },
@@ -293,7 +297,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${runtime.MINIMAX_API_KEY}` },
       body: JSON.stringify({
-        model: runtime.MINIMAX_TTS_MODEL || "speech-2.8-turbo",
+        model,
         text,
         stream: false,
         output_format: "hex",
@@ -307,7 +311,7 @@ export async function POST(request: Request) {
     const audio = hexToBytes(data.data.audio);
     const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
     await runtime.DB.batch([
-      runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(replyHash, exactAudio, Date.now()),
+      runtime.DB.prepare("INSERT INTO tts_audio_cache (reply_hash, audio, created_at) VALUES (?, ?, ?) ON CONFLICT(reply_hash) DO UPDATE SET audio=excluded.audio, created_at=excluded.created_at").bind(audioCacheKey, exactAudio, Date.now()),
       runtime.DB.prepare("UPDATE tts_grants_v2 SET status = 2 WHERE grant_id = ?").bind(grant),
     ]);
     return audioResponse(audio);
