@@ -9,8 +9,8 @@ type Message = { role: "user" | "assistant"; content: string; sources?: Source[]
 const roles: Array<{ id: PersonaId; name: string; real: string; note: string; mark: string; avatar: string }> = [
   { id: "kunkun", name: "坤坤", real: "蔡徐坤", note: "音乐、舞台与创作", mark: "坤", avatar: "/kun-avatar.png" },
   { id: "fengge", name: "峰哥", real: "峰哥", note: "直接、具体的观点", mark: "峰", avatar: "/fengge-avatar.jpg" },
-  { id: "linqingxia", name: "林青霞", real: "林青霞", note: "电影、阅读与审美", mark: "林", avatar: "/linqingxia-avatar.jpg" },
-  { id: "tulei", name: "涂磊", real: "涂磊", note: "关系、责任与边界", mark: "涂", avatar: "/tulei-avatar.jpg" },
+  { id: "linqingxia", name: "青霞", real: "林青霞", note: "电影、阅读与审美", mark: "林", avatar: "/linqingxia-avatar.jpg" },
+  { id: "tulei", name: "磊磊", real: "涂磊", note: "关系、责任与边界", mark: "涂", avatar: "/tulei-avatar.jpg" },
 ];
 
 const welcomes: Record<PersonaId, string> = {
@@ -37,6 +37,7 @@ export default function Home() {
   const [minimaxTts, setMinimaxTts] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
+  const [speakingGrant, setSpeakingGrant] = useState<string | null>(null);
   const [error, setError] = useState("");
   const streamRef = useRef<HTMLDivElement>(null);
   const audioCacheRef = useRef<Map<string, string>>(new Map());
@@ -44,7 +45,7 @@ export default function Home() {
   const messages = histories[persona] || [];
 
   useEffect(() => {
-    const saved = localStorage.getItem("kun-public-histories");
+    const saved = localStorage.getItem("kun-public-histories-v2");
     if (saved) {
       try { setHistories(JSON.parse(saved)); } catch { /* ignore invalid local data */ }
     }
@@ -56,7 +57,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("kun-public-histories", JSON.stringify(histories));
+    localStorage.setItem("kun-public-histories-v2", JSON.stringify(histories));
     requestAnimationFrame(() => streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" }));
   }, [histories, persona]);
 
@@ -112,6 +113,7 @@ export default function Home() {
 
   async function speak(text: string, grant: string) {
     setError("");
+    setSpeakingGrant(grant);
     try {
       const cachedUrl = audioCacheRef.current.get(grant);
       if (cachedUrl) {
@@ -134,6 +136,8 @@ export default function Home() {
       await audio.play();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "云端语音暂时不可用。");
+    } finally {
+      setSpeakingGrant(null);
     }
   }
 
@@ -172,7 +176,7 @@ export default function Home() {
               <div className="bubble">
                 {message.content}
                 {message.sources?.length ? <div className="sources"><strong>参考公开资料</strong>{message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div> : null}
-                {message.role === "assistant" && message.audioGrant && <button className="listen" onClick={() => void speak(message.content, message.audioGrant!)}>🔊 MiniMax 云端数字人语音</button>}
+                {message.role === "assistant" && message.audioGrant && <button className="listen" disabled={speakingGrant === message.audioGrant} onClick={() => void speak(message.content, message.audioGrant!)}>{speakingGrant === message.audioGrant ? "正在生成语音…" : "🔊 点击播放 MiniMax 云端数字人语音"}</button>}
               </div>
             </article>
           ))}
@@ -185,7 +189,7 @@ export default function Home() {
           <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="有问题，尽管问" rows={1} />
           <button className="send" disabled={!input.trim() || busy || remaining === 0} onClick={() => void send()} aria-label="发送">↑</button>
         </div>
-        <footer>{minimaxTts ? "语音由服务器安全调用 MiniMax；密钥与 Voice ID 不会发送到浏览器。" : "云端数字人语音尚未启用；不会回退成不一致的浏览器声线。"} 公开版默认每位访客免费 5 次。</footer>
+        <footer>{minimaxTts ? "语音由服务器安全调用 MiniMax；密钥与 Voice ID 不会发送到浏览器。" : "云端数字人语音尚未启用；不会回退成不一致的浏览器声线。"} 当前测试期不限次数。</footer>
       </section>
     </main>
   );
