@@ -1,4 +1,4 @@
-export type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei";
+export type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei" | "laocan";
 
 export type RagRecord = {
   record_id: string;

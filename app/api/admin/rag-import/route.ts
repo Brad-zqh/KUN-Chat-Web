@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   if (!runtime.DB) return Response.json({ error: "database_unavailable" }, { status: 503 });
 
   const payload = await request.json() as { persona?: PersonaId; kind?: "facts" | "styles"; reset?: boolean; records?: ImportRecord[] };
-  const personas: PersonaId[] = ["kunkun", "fengge", "linqingxia", "tulei"];
+  const personas: PersonaId[] = ["kunkun", "fengge", "linqingxia", "tulei", "laocan"];
   if (!payload.persona || !personas.includes(payload.persona) || !["facts", "styles"].includes(payload.kind || "") || !Array.isArray(payload.records) || payload.records.length > 100) {
     return Response.json({ error: "invalid_payload" }, { status: 400 });
   }

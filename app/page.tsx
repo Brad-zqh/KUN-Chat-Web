@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei";
+type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei" | "laocan";
 type Source = { title: string; url: string };
 type Message = { role: "user" | "assistant"; content: string; sources?: Source[]; audioGrant?: string | null };
 
@@ -11,6 +11,7 @@ const roles: Array<{ id: PersonaId; name: string; real: string; note: string; ma
   { id: "fengge", name: "峰哥", real: "峰哥", note: "直接、具体的观点", mark: "峰", avatar: "/fengge-avatar.jpg" },
   { id: "linqingxia", name: "青霞", real: "林青霞", note: "电影、阅读与审美", mark: "林", avatar: "/linqingxia-avatar.jpg" },
   { id: "tulei", name: "磊磊", real: "涂磊", note: "关系、责任与边界", mark: "涂", avatar: "/tulei-avatar.jpg" },
+  { id: "laocan", name: "老残", real: "老残", note: "观察、表达与闲聊", mark: "老", avatar: "/laocan-avatar.jpg" },
 ];
 
 const welcomes: Record<PersonaId, string> = {
@@ -18,6 +19,7 @@ const welcomes: Record<PersonaId, string> = {
   fengge: "有问题就直接问吧。这里会参考已经审核的公开资料来回答。",
   linqingxia: "你好。我们可以聊电影、阅读、写作，也可以聊聊生活里的感受。",
   tulei: "你可以直接说问题。我们先把事实、责任和边界理清楚。",
+  laocan: "你好，我是老残，今天有什么想和我聊聊的吗？这里是 AI 数字人角色，不是真人本人。",
 };
 
 function getVisitorId() {

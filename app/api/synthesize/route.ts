@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei";
+type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei" | "laocan";
 
 function cleanForSpeech(text: string) {
   const cues = /语气|平静|平和|轻声|低声|温柔|认真|坚定|微笑|叹气|停顿|沉默|放松|思考|缓慢/;
@@ -37,12 +37,19 @@ function audioResponse(audio: ArrayBuffer | Uint8Array, cache = false) {
   });
 }
 
+function minimaxSpeedFor(runtime: Record<string, string | undefined>, persona: PersonaId) {
+  const raw = runtime[`MINIMAX_TTS_SPEED_${persona.toUpperCase()}`] || runtime.MINIMAX_TTS_SPEED || "1";
+  const speed = Number(raw);
+  return Number.isFinite(speed) && speed > 0 ? speed : 1;
+}
+
 async function minimaxWebSocketAudio(
   apiBase: string,
   apiKey: string,
   voiceId: string,
   text: string,
   model: string,
+  speed: number,
 ) {
   const base = apiBase.replace(/\/$/, "").replace(/^https:/, "https:").replace(/^http:/, "http:");
   const response = await fetch(`${base}/ws/v1/t2a_v2`, {
@@ -92,7 +99,7 @@ async function minimaxWebSocketAudio(
             event: "task_start",
             model,
             language_boost: "Chinese",
-            voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+            voice_setting: { voice_id: voiceId, speed, vol: 1, pitch: 0 },
             audio_setting: { sample_rate: 24000, bitrate: 128000, format: "mp3", channel: 1 },
           }));
         } else if (message.event === "task_started" && !started) {
@@ -122,6 +129,7 @@ async function minimaxWebSocketStreamResponse(
   voiceId: string,
   text: string,
   model: string,
+  speed: number,
   onComplete: (audio: Uint8Array) => Promise<void>,
   onFailure: () => Promise<void>,
 ) {
@@ -184,7 +192,7 @@ async function minimaxWebSocketStreamResponse(
               event: "task_start",
               model,
               language_boost: "Chinese",
-              voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+              voice_setting: { voice_id: voiceId, speed, vol: 1, pitch: 0 },
               audio_setting: { sample_rate: 24000, bitrate: 128000, format: "mp3", channel: 1 },
             }));
           } else if (message.event === "task_started" && !started) {
@@ -235,7 +243,7 @@ export async function POST(request: Request) {
 
   const payload = await request.json() as { persona?: PersonaId; text?: string; grant?: string };
   const persona = payload.persona;
-  if (!persona || !["kunkun", "fengge", "linqingxia", "tulei"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
+  if (!persona || !["kunkun", "fengge", "linqingxia", "tulei", "laocan"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
   const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
   if (!voiceId) return Response.json({ error: "当前数字人尚未配置云端声线。" }, { status: 503 });
   const grant = String(payload.grant || "");
@@ -252,6 +260,7 @@ export async function POST(request: Request) {
   const replyHash = claim.reply_hash;
   const text = cleanForSpeech(claim.reply_text);
   if (!text) return Response.json({ error: "语音请求无效。" }, { status: 400 });
+  const speed = minimaxSpeedFor(runtime, persona);
 
   const cached = await runtime.DB.prepare("SELECT audio FROM tts_audio_cache WHERE reply_hash = ?").bind(replyHash).first<{ audio: ArrayBuffer }>();
   if (cached?.audio) return audioResponse(cached.audio, true);
@@ -267,6 +276,7 @@ export async function POST(request: Request) {
         voiceId,
         text,
         runtime.MINIMAX_TTS_MODEL || "speech-2.8-hd",
+        speed,
         async (audio) => {
           const exactAudio = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
           await runtime.DB!.batch([
@@ -288,7 +298,7 @@ export async function POST(request: Request) {
         stream: false,
         output_format: "hex",
         language_boost: "Chinese",
-        voice_setting: { voice_id: voiceId, speed: 1.03, vol: 1, pitch: 0 },
+        voice_setting: { voice_id: voiceId, speed, vol: 1, pitch: 0 },
         audio_setting: { sample_rate: 24000, bitrate: 128000, format: "mp3", channel: 1 },
       }),
     });
