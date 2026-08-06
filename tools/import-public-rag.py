@@ -41,6 +41,7 @@ def production_records() -> dict[str, dict[str, list[dict]]]:
         "laocan": ROOT / "persona-material" / "Laocan" / "production" / "laocan-rag.sqlite3",
         "qiuhao": ROOT / "persona-material" / "Qiuhao" / "production" / "qiuhao-rag.sqlite3",
         "qingliangshanren": ROOT / "persona-material" / "Qingliangshanren" / "production" / "qingliangshanren-rag.sqlite3",
+        "zouyuxin": ROOT / "persona-material" / "Zouyuxin" / "production" / "zouyuxin-rag.sqlite3",
     }
     for persona, db_path in persona_databases.items():
         result[persona] = {

@@ -14,7 +14,7 @@ const roles: Role[] = [
   { id: "laocan", name: "老残", real: "老残", note: "观察、表达与闲聊", mark: "老", avatar: "/laocan-avatar.jpg" },
   { id: "qiuhao", name: "皓哥", real: "皓哥", note: "本人授权私人数字人", mark: "皓", avatar: "/qiuhao-avatar.png" },
   { id: "qingliangshanren", name: "清凉山人", real: "清凉山人", note: "家人授权独立 RAG", mark: "清" },
-  { id: "zouyuxin", name: "雨芯", real: "邹雨芯", note: "授权声线数字人", mark: "雨" },
+  { id: "zouyuxin", name: "雨芯", real: "邹雨芯", note: "授权独立 RAG", mark: "雨", avatar: "/zouyuxin-avatar.png" },
 ];
 
 const welcomes: Record<PersonaId, string> = {
@@ -23,7 +23,7 @@ const welcomes: Record<PersonaId, string> = {
   laocan: "你好，我是老残，今天有什么想和我聊聊的吗？这里是 AI 数字人角色，不是真人本人。",
   qiuhao: "你好，我是皓哥的私人 AI 数字人。这里使用本人授权资料，但不能代替本人作出现实承诺。",
   qingliangshanren: "你好，我是清凉山人的家庭授权 AI 数字人。可以聊阅读、生活和人生感悟，但不能代替本人作出现实承诺。",
-  zouyuxin: "你好，我是雨芯的授权声线 AI 数字人。这里不是真人本人，也不能代替本人作出现实承诺。",
+  zouyuxin: "你好，我是雨芯的授权 AI 数字人。这里会参考经过隐私清洗的独立资料，但不是真人本人，也不能代替本人作出现实承诺。",
 };
 
 function RoleAvatar({ role }: { role: Role }) {
