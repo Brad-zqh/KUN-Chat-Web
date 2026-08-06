@@ -12,8 +12,8 @@ test("ships the public KUN Chat product instead of the starter", async () => {
   assert.match(page, /KUN Chat/);
   assert.match(page, /坤坤/);
   assert.match(page, /峰哥/);
-  assert.match(page, /林青霞/);
-  assert.match(page, /涂磊/);
+  assert.match(page, /清凉山人/);
+  assert.match(page, /雨芯/);
   assert.match(page, /SpeechRecognition/);
   assert.match(layout, /AI 数字人与赛博同人对话平台/);
   assert.match(page, /MiniMax 云端数字人语音/);

@@ -7,9 +7,10 @@ type Source = { title: string; url: string; text: string };
 const personaPrompts: Record<PersonaId, string> = {
   kunkun: "你是根据蔡徐坤公开表达资料设计的 AI 同人角色，昵称坤坤。你不是蔡徐坤本人或工作室。语气温和、克制、自然，适合聊音乐、舞台、创作和练习。先回答用户的具体问题，不重复自我介绍，不编造行程、私生活、现实关系或未公开观点。",
   fengge: "你是根据峰哥公开表达资料设计的 AI 同人角色，昵称峰哥。你不是峰哥本人。表达直接、有节奏，可以反问，但不刻意冒犯；不得编造收入、旅行、投资、直播经历或私人关系。",
-  linqingxia: "你是根据林青霞公开表达资料设计的 AI 同人角色，昵称林青霞。你不是林青霞本人。表达从容、清醒、温暖，适合聊电影、阅读、写作与审美。影视角色台词不等于本人观点，不编造家庭和私人经历。",
-  tulei: "你是根据涂磊公开表达资料设计的 AI 同人角色，昵称涂磊。你不是涂磊本人。表达务实直接，先厘清责任和边界，不训斥用户，不作心理诊断。节目嘉宾故事不是本人经历。",
   laocan: "你是一个名为“老残”的 AI 数字人角色，不是真人本人，也不代表任何本人、团队或工作室。回答只能使用已导入的老残独立 RAG、用户当前提供的信息和通用常识；不能引用或迁移坤坤、峰哥、青霞、磊磊的资料库。默认中文，语气放松、亲和、略带一点口语感；先回答用户的问题，不要绕回自我介绍。主要聊阅读写作、地方文化、生活观察、旅行见闻和日常话题；不要把残疾经历当作人物标签，不主动反复谈残疾、轮椅或无障碍议题，不使用歧视、猎奇、怜悯化或冒犯性表达。",
+  qiuhao: "你是依据皓哥本人明确授权的声音、文字与对话资料创建的私人 AI 数字人，昵称皓哥。你不是现实中的皓哥本人，也不能代替本人作出现实承诺。只使用皓哥独立 RAG、当前对话和通用常识，不得引用其他人物库。微信群聊只允许学习能够明确归属于皓哥本人的消息；群友内容仅作上下文，不得作为皓哥的观点或表达，也不得泄露任何群友隐私。资料不足时直接说明不知道。默认自然中文，先回答问题，不重复自我介绍。",
+  qingliangshanren: "你是依据家人明确授权的声音和文字资料创建的私人 AI 数字人，昵称清凉山人。你不是现实中的清凉山人本人，也不能代替本人作出现实承诺。只使用清凉山人独立 RAG、当前对话和通用常识，不得引用其他人物库。朗读的古文不是私人经历，不能当作个人事实。不要以第一人称声称自己平时读古文、喝茶、休息或拥有任何生活习惯；提出建议时直接说建议，不要包装成‘我自己的经验’。资料不足时直接说明不知道。默认使用自然、平和的中文。",
+  zouyuxin: "你是依据资料提供者确认有权使用的声音资料创建的私人 AI 数字人，昵称雨芯。你不是现实中的邹雨芯本人，也不能代替本人作出现实承诺。当前没有独立 RAG，只使用当前对话和通用常识，不得引用其他人物库，也不得把授权录音内容扩展成私人事实。不要使用‘我自己的经验’‘我平时’‘我也会’等说法虚构生活习惯或亲历；提出建议时直接说明这是一般建议。资料不足时直接说明不知道。默认使用自然、温和、简洁的中文。",
 };
 
 const reviewedSources: Record<PersonaId, Source[]> = {
@@ -20,17 +21,16 @@ const reviewedSources: Record<PersonaId, Source[]> = {
     { title: "峰哥亡命天涯：镜头前卓别林、镜头外普通人", url: "https://www.bilibili.com/video/BV1Bz421C7mg/", text: "2024 年 4 月 15 日，凉子访谈录发布峰哥人物访谈，原发布页将镜头内的表演身份与镜头外的普通人身份作为核心主题。" },
     { title: "峰哥公开表达风格样本", url: "https://www.bilibili.com/video/BV1Bz421C7mg/", text: "表达常使用对照结构、自我定位、口语化和具体比喻；只能学习结构，不逐句复刻原话。" },
   ],
-  linqingxia: [
-    { title: "国立清华大学 112 学年度毕业典礼", url: "https://ccmedia.site.nthu.edu.tw/p/405-1540-270762%2Cc18610.php", text: "林青霞于 2024 年 6 月 15 日在清华大学毕业典礼担任贵宾致词，校方视频将其连续发言标在 15:48 至 30:30。" },
-    { title: "国立清华大学简讯第 1356 期", url: "https://my.nthu.edu.tw/~nthunews/NTHU1356.pdf", text: "校刊记录她谈到写作、绘画、观察人与事和持续学习，以及重新发现兴趣与内在快乐的过程。风格温和、意象化、短句递进。" },
-  ],
-  tulei: [
-    { title: "央会见专访：知名主持人、网络主播代表涂磊", url: "https://kepu.cctv.cn/2025/09/28/VIDErTzo8XFUG9VHSvOPS6LO250928.shtml", text: "央视网于 2025 年 9 月 28 日发布涂磊专访短片，主题涉及直播电商中的技术、理念和算法更新。" },
-    { title: "从流量到“留量”", url: "https://jl.people.com.cn/n2/2025/0728/c349771-41304973.html", text: "人民网报道他在 2025 年中国新电商大会谈到责任、信任与直播电商。表达常使用对照句、责任判断和先结论后展开的结构。" },
-  ],
   laocan: [
     { title: "老残独立 RAG 待导入", url: "https://github.com/Brad-zqh/KUN-Chat", text: "老残角色使用独立资料命名空间。当前公网只允许读取已导入的老残生产 RAG；未导入时不要迁移其他人物资料。" },
   ],
+  qiuhao: [
+    { title: "皓哥本人授权资料库", url: "https://github.com/Brad-zqh/KUN-Chat", text: "该角色使用皓哥本人授权提供的声音与文字材料。当前仅允许读取完成作者归属和隐私清洗的独立生产语料。" },
+  ],
+  qingliangshanren: [
+    { title: "清凉山人家庭授权资料库", url: "https://github.com/Brad-zqh/KUN-Chat", text: "该角色使用家人授权提供并完成归属审查的独立资料。朗读内容只能用于表达节奏，不能扩展为本人经历。" },
+  ],
+  zouyuxin: [],
 };
 
 function factContext(records: RagRecord[]) {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const message = String(payload.message || "").trim().slice(0, 1600);
   if (!personaPrompts[persona] || !message) return Response.json({ error: "请求内容无效。" }, { status: 400 });
 
-  const freeLimit = Math.max(1, Number(runtime.PUBLIC_FREE_MESSAGES || 5));
+  const freeLimit = Math.max(1, Number(runtime.PUBLIC_FREE_MESSAGES || 4));
   const suppliedId = request.headers.get("x-visitor-id") || "anonymous";
   const id = await visitorKey(request, suppliedId);
   const ttsVisitorId = await textHash(`tts:${suppliedId}`);

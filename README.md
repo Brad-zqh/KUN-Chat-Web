@@ -11,9 +11,9 @@ Drizzle support.
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
-npm run build
+# Dependencies are stored outside OneDrive. Run these from the KUN-Chat root:
+powershell -ExecutionPolicy Bypass -File .\scripts\run-public-site.ps1 -Command dev
+powershell -ExecutionPolicy Bypass -File .\scripts\run-public-site.ps1 -Command build
 ```
 
 This starter does not use `wrangler.jsonc`.
@@ -87,10 +87,11 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- `scripts\run-public-site.ps1 -Command dev`: start local development with external dependencies
+- `scripts\run-public-site.ps1 -Command build`: verify the vinext build output
+- `scripts\run-public-site.ps1 -Command test`: build and verify the rendered loading skeleton
+
+The dependency directory is `D:\LocalDevDeps\OneDriveMirror\LLMs\KUN-Chat\public-site\node_modules`. The script mirrors source files into a dedicated workspace below `D:\LocalDevDeps` before invoking npm, so no `node_modules` directory or directory junction is recreated inside OneDrive.
 
 ## Learn More
 

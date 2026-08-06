@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei" | "laocan";
+type PersonaId = "kunkun" | "fengge" | "laocan" | "qiuhao" | "qingliangshanren" | "zouyuxin";
 
 function cleanForSpeech(text: string) {
   const cues = /语气|平静|平和|轻声|低声|温柔|认真|坚定|微笑|叹气|停顿|沉默|放松|思考|缓慢/;
@@ -266,7 +266,7 @@ export async function POST(request: Request) {
 
   const payload = await request.json() as { persona?: PersonaId; text?: string; grant?: string };
   const persona = payload.persona;
-  if (!persona || !["kunkun", "fengge", "linqingxia", "tulei", "laocan"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
+  if (!persona || !["kunkun", "fengge", "laocan", "qiuhao", "qingliangshanren", "zouyuxin"].includes(persona)) return Response.json({ error: "角色无效。" }, { status: 400 });
   const voiceId = runtime[`MINIMAX_VOICE_ID_${persona.toUpperCase()}`];
   if (!voiceId) return Response.json({ error: "当前数字人尚未配置云端声线。" }, { status: 503 });
   const grant = String(payload.grant || "");

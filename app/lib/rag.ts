@@ -1,4 +1,4 @@
-export type PersonaId = "kunkun" | "fengge" | "linqingxia" | "tulei" | "laocan";
+export type PersonaId = "kunkun" | "fengge" | "laocan" | "qiuhao" | "qingliangshanren" | "zouyuxin";
 
 export type RagRecord = {
   record_id: string;
@@ -31,7 +31,7 @@ function terms(text: string) {
   return result;
 }
 
-function rank(rows: RagRecord[], query: string, limit: number) {
+function rank(rows: RagRecord[], query: string, limit: number, includeZero = false) {
   const queryTerms = terms(query);
   return rows
     .map((row, index) => {
@@ -44,6 +44,7 @@ function rank(rows: RagRecord[], query: string, limit: number) {
       }
       return { row, score, index };
     })
+    .filter((item) => includeZero || item.score > 0)
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, limit)
     .map(({ row }) => row);
@@ -57,7 +58,7 @@ export async function searchRag(db: D1Database, persona: PersonaId, query: strin
   ]);
   return {
     facts: rank(facts.results || [], query, 5),
-    styles: rank(styles.results || [], query, 4),
+    styles: rank(styles.results || [], query, 4, true),
   };
 }
 

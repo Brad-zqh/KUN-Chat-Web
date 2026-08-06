@@ -18,7 +18,12 @@ def rows(db_path: Path, sql: str) -> list[dict]:
     connection = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
-        return [dict(row) for row in connection.execute(sql)]
+        records = [dict(row) for row in connection.execute(sql)]
+        for record in records:
+            url = str(record.get("url") or "").strip()
+            if url and not url.startswith(("https://", "http://")):
+                record["url"] = ""
+        return records
     finally:
         connection.close()
 
@@ -31,10 +36,15 @@ def production_records() -> dict[str, dict[str, list[dict]]]:
             "styles": rows(kun_db, "SELECT example_key AS record_id, text, title, '' AS url, tags_json FROM style_examples ORDER BY id"),
         }
     }
-    for persona in ("fengge", "linqingxia", "tulei"):
-        db_path = ROOT / "persona-material" / persona / "production" / f"{persona}-rag.sqlite3"
+    persona_databases = {
+        "fengge": ROOT / "persona-material" / "fengge" / "production" / "fengge-rag.sqlite3",
+        "laocan": ROOT / "persona-material" / "Laocan" / "production" / "laocan-rag.sqlite3",
+        "qiuhao": ROOT / "persona-material" / "Qiuhao" / "production" / "qiuhao-rag.sqlite3",
+        "qingliangshanren": ROOT / "persona-material" / "Qingliangshanren" / "production" / "qingliangshanren-rag.sqlite3",
+    }
+    for persona, db_path in persona_databases.items():
         result[persona] = {
-            "facts": rows(db_path, "SELECT record_id, text, source_title AS title, source_url AS url FROM documents WHERE kind='fact' AND semantic_gate='attributed_fact' ORDER BY record_id"),
+            "facts": rows(db_path, "SELECT record_id, text, source_title AS title, source_url AS url FROM documents WHERE kind='fact' AND semantic_gate IN ('attributed_fact', 'own_speech') ORDER BY record_id"),
             "styles": rows(db_path, "SELECT record_id, text, '' AS title, source_url AS url, style_tags_json AS tags_json FROM style_examples ORDER BY record_id"),
         }
     return result
